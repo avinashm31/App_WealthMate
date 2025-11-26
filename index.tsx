@@ -1302,7 +1302,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-1.5-flash',
                     contents: prompt,
                     config: { responseMimeType: 'application/json' }
                 });
@@ -1344,6 +1344,10 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
 
         await fetchTransactions(); // Force re-fetch
         setLastUpdated(new Date());
+        // Reset filters so the new item is visible
+        setCategoryFilter('ALL');
+        setStartDate('');
+        setEndDate('');
         setDesc(''); setAmt(''); setManualFormOpen(false);
     };
 
@@ -1433,7 +1437,8 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             4. Keep it clean text (no markdown).
             Tone: Professional, direct, high-finance. Under 60 words.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+            // Switch to gemini-1.5-flash for stability in production if 2.0 is experimental
+            const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
             setAdvice(response.text);
         } catch (e) { 
             console.error("AI Error:", e);
