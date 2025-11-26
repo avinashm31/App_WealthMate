@@ -725,7 +725,7 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
                 letterSpacing: '0.01em',
                 lineHeight: 1.6
             }}>
-                Experience personal finance with premium analytics, AI-powered insights, and intelligent budgeting powered by Google's <span style={{ color: GOLD_COLOR }}>Gemini 3.0 Pro</span>.
+                Experience personal finance with premium analytics, AI-powered insights, and intelligent budgeting powered by Google's <span style={{ color: GOLD_COLOR }}>Gemini 2.0 Flash</span>.
             </p>
             
             <button 
@@ -867,7 +867,7 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
                     <FeatureCard 
                         icon={<Cpu size={32} color={GOLD_COLOR} />}
                         title="Predictive Advisory"
-                        desc="Forward-looking wealth synthesis. Gemini 3.0 models your burn rate against seasonal volatility to forecast liquidity events before they happen."
+                        desc="Forward-looking wealth synthesis. Gemini 2.0 models your burn rate against seasonal volatility to forecast liquidity events before they happen."
                     />
                     <FeatureCard 
                         icon={<Target size={32} color={GOLD_COLOR} />}
@@ -1172,6 +1172,23 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
     const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
     const [dbError, setDbError] = useState<string | null>(null);
 
+    // Auto-Heal Profile to prevent FK errors
+    useEffect(() => {
+        const checkProfile = async () => {
+             const { data } = await supabase.from('profiles').select('id').eq('id', user.id).single();
+             if (!data) {
+                 // Profile missing? Create it silently
+                 await supabase.from('profiles').insert([{ 
+                     id: user.id, 
+                     email: user.email, 
+                     full_name: user.name, 
+                     target_savings: user.targetSavings 
+                 }]);
+             }
+        };
+        checkProfile();
+    }, [user, supabase]);
+
     // Fetch Transactions
     const fetchTransactions = useCallback(async () => {
         const { data, error } = await supabase.from('transactions').select('*').eq('user_id', user.id).order('date', { ascending: false });
@@ -1302,7 +1319,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
                 const response = await ai.models.generateContent({
-                    model: 'gemini-1.5-flash',
+                    model: 'gemini-2.0-flash',
                     contents: prompt,
                     config: { responseMimeType: 'application/json' }
                 });
@@ -1437,8 +1454,8 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             4. Keep it clean text (no markdown).
             Tone: Professional, direct, high-finance. Under 60 words.
             `;
-            // Switch to gemini-1.5-flash for stability in production if 2.0 is experimental
-            const response = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
+            // Switch to gemini-2.0-flash as requested
+            const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
             setAdvice(response.text);
         } catch (e) { 
             console.error("AI Error:", e);
