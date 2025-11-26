@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
@@ -29,20 +28,14 @@ import {
   CreditCard,
   Wifi,
   X,
-  Save,
-  Filter,
-  BarChart3,
-  Mail,
-  Key,
-  User,
   AlertTriangle,
-  CheckCircle2,
-  Bell,
-  Database,
-  Link as LinkIcon,
-  Menu,
-  ChevronDown
+  Mail,
+  User,
+  LogIn,
+  Search
 } from 'lucide-react';
+
+declare var process: any;
 
 // --- Configuration & Constants ---
 const COIN_COUNT = 90; 
@@ -52,12 +45,9 @@ const DARK_GOLD = '#8A7120';
 const OBSIDIAN_BG = '#050505';
 const PLATINUM_TEXT = '#E5E4E2';
 
-// Supabase Credentials (Hardcoded)
-const SUPABASE_URL = "https://hhsfmkxlzwyxtqftyieb.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhoc2Zta3hsend5eHRxZnR5aWViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNzU1NTUsImV4cCI6MjA3OTY1MTU1NX0.OAz-1r_y5XZBQMW-vfcoFcSU3jg1zxonyrgtdY689nQ";
-
-// Gemini API Credentials (Hardcoded)
-const GEMINI_API_KEY = "AIzaSyCBjoyOyZX_EYUz-sN7-czXAHZm0kTb1FE";
+// Env Variables (Vite standard)
+const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "https://hhsfmkxlzwyxtqftyieb.supabase.co";
+const SUPABASE_KEY = (import.meta as any).env?.VITE_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhoc2Zta3hsend5eHRxZnR5aWViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNzU1NTUsImV4cCI6MjA3OTY1MTU1NX0.OAz-1r_y5XZBQMW-vfcoFcSU3jg1zxonyrgtdY689nQ";
 
 // Luxury Palette for Chart
 const CHART_COLORS = [
@@ -1302,7 +1292,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         const descriptions = Array.from(uniqueDescriptions).slice(0, 100);
         if (descriptions.length > 0) {
             try {
-                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
                 const prompt = `
                 Categorize these financial transaction descriptors into simple buckets: 
                 Buckets: Food, Transport, Utilities, Shopping, Entertainment, Health, Transfer, Housing, Salary, Investment.
@@ -1311,7 +1301,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.0-flash',
+                    model: 'gemini-2.5-flash',
                     contents: prompt,
                     config: { responseMimeType: 'application/json' }
                 });
@@ -1417,7 +1407,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         const categorySummary = chartData.map(c => `${c.label}: ₹${c.value}`).join(', ');
         
         try {
-            const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const prompt = `
             Act as a ruthless institutional wealth advisor for a premium client.
             Client: ${currentUser.name}.
@@ -1432,7 +1422,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             4. Keep it clean text (no markdown).
             Tone: Professional, direct, high-finance. Under 60 words.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
             setAdvice(response.text);
         } catch (e) { setAdvice("Advisory systems unavailable. Check network protocols."); }
         setIsAnalyzing(false);
