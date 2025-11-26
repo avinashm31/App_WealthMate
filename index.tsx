@@ -1055,8 +1055,8 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
             });
             if (error) throw error;
             if (data.user) {
-                // Create profile entry
-                const { error: profileError } = await supabase.from('profiles').insert([{ id: data.user.id, email, full_name: name, target_savings: 50000 }]);
+                // Create profile entry immediately on signup
+                const { error: profileError } = await supabase.from('profiles').upsert([{ id: data.user.id, email, full_name: name, target_savings: 50000 }]);
                 if (profileError) console.error(profileError);
                 setMsg("Account created. Please check your email for verification link.");
             }
@@ -1174,15 +1174,15 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
 
     // Robust Profile Check to fix FK errors
     const ensureProfile = async () => {
-        const { data } = await supabase.from('profiles').select('id').eq('id', user.id).single();
-        if (!data) {
-            await supabase.from('profiles').insert([{ 
-                id: user.id, 
-                email: user.email, 
-                full_name: user.name, 
-                target_savings: user.targetSavings 
-            }]);
-        }
+        // Upsert ensures the row exists without race conditions
+        const { error } = await supabase.from('profiles').upsert({ 
+            id: user.id, 
+            email: user.email, 
+            full_name: user.name, 
+            target_savings: user.targetSavings 
+        }, { onConflict: 'id' });
+        
+        if (error) console.error("Profile Upsert Error:", error);
     };
 
     useEffect(() => {
