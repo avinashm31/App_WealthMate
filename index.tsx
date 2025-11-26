@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { read, utils } from "xlsx";
 import { createClient } from '@supabase/supabase-js';
 import { 
@@ -694,7 +694,7 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
                 letterSpacing: '2px', textTransform: 'uppercase', border: `1px solid ${GOLD_COLOR}40`
             }}>
                 <div style={{ width: '6px', height: '6px', background: GOLD_COLOR, borderRadius: '50%', boxShadow: `0 0 8px ${GOLD_COLOR}` }}></div>
-                System V3.0 Online
+                System V2.0 Online
             </div>
             
             <h1 style={{ 
@@ -1172,21 +1172,21 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
     const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
     const [dbError, setDbError] = useState<string | null>(null);
 
-    // Auto-Heal Profile to prevent FK errors
+    // Robust Profile Check to fix FK errors
+    const ensureProfile = async () => {
+        const { data } = await supabase.from('profiles').select('id').eq('id', user.id).single();
+        if (!data) {
+            await supabase.from('profiles').insert([{ 
+                id: user.id, 
+                email: user.email, 
+                full_name: user.name, 
+                target_savings: user.targetSavings 
+            }]);
+        }
+    };
+
     useEffect(() => {
-        const checkProfile = async () => {
-             const { data } = await supabase.from('profiles').select('id').eq('id', user.id).single();
-             if (!data) {
-                 // Profile missing? Create it silently
-                 await supabase.from('profiles').insert([{ 
-                     id: user.id, 
-                     email: user.email, 
-                     full_name: user.name, 
-                     target_savings: user.targetSavings 
-                 }]);
-             }
-        };
-        checkProfile();
+        ensureProfile();
     }, [user, supabase]);
 
     // Fetch Transactions
@@ -1306,11 +1306,14 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         }
         
         setIsAnalyzing(true);
-        // AI Categorization Batch
+        await ensureProfile();
+
+        // AI Categorization Batch using Stable SDK
         const descriptions = Array.from(uniqueDescriptions).slice(0, 100);
         if (descriptions.length > 0) {
             try {
-                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+                const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
                 const prompt = `
                 Categorize these financial transaction descriptors into simple buckets: 
                 Buckets: Food, Transport, Utilities, Shopping, Entertainment, Health, Transfer, Housing, Salary, Investment.
@@ -1318,12 +1321,10 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
                 Return strictly JSON: { "Starbucks": "Food", "Uber": "Transport" }
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.0-flash',
-                    contents: prompt,
-                    config: { responseMimeType: 'application/json' }
-                });
-                const categoryMap = JSON.parse(response.text);
+                const result = await model.generateContent(prompt);
+                const text = result.response.text();
+                const jsonStr = text.replace(/```json|```/g, '').trim();
+                const categoryMap = JSON.parse(jsonStr);
                 newTxns.forEach(t => { 
                     if (t.type === 'expense' && categoryMap[t.description]) {
                         t.category = categoryMap[t.description];
@@ -1343,29 +1344,34 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
     const handleAddManual = async () => {
         if (!desc || !amt) return;
         
-        // Strict Error Handling for Manual Insertion
-        const { error } = await supabase.from('transactions').insert([{ 
-            user_id: user.id,
-            description: desc, 
-            amount: parseFloat(amt), 
-            category: type === 'expense' ? category : 'Income', 
-            date: new Date().toISOString().split('T')[0], 
-            type: type 
-        }]);
+        try {
+            await ensureProfile();
+            // Strict Error Handling for Manual Insertion
+            const { error } = await supabase.from('transactions').insert([{ 
+                user_id: user.id,
+                description: desc, 
+                amount: parseFloat(amt), 
+                category: type === 'expense' ? category : 'Income', 
+                date: new Date().toISOString().split('T')[0], 
+                type: type 
+            }]);
 
-        if (error) {
-            console.error("Manual Insert Failed:", error);
-            alert(`Failed to add transaction. Supabase Error: ${error.message}`);
-            return;
+            if (error) {
+                console.error("Manual Insert Failed:", error);
+                alert(`Failed to add transaction. Supabase Error: ${error.message}`);
+                return;
+            }
+
+            await fetchTransactions(); // Force re-fetch
+            setLastUpdated(new Date());
+            // Reset filters so the new item is visible
+            setCategoryFilter('ALL');
+            setStartDate('');
+            setEndDate('');
+            setDesc(''); setAmt(''); setManualFormOpen(false);
+        } catch (err: any) {
+            alert("System Error: " + err.message);
         }
-
-        await fetchTransactions(); // Force re-fetch
-        setLastUpdated(new Date());
-        // Reset filters so the new item is visible
-        setCategoryFilter('ALL');
-        setStartDate('');
-        setEndDate('');
-        setDesc(''); setAmt(''); setManualFormOpen(false);
     };
 
     const handleDelete = async (id: string) => { 
@@ -1438,8 +1444,9 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         const categorySummary = chartData.map(c => `${c.label}: ₹${c.value}`).join(', ');
         
         try {
-            // Using Hardcoded Key for Vercel
-            const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+            // Using Stable SDK with hardcoded key
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
             const prompt = `
             Act as a ruthless institutional wealth advisor for a premium client.
             Client: ${currentUser.name}.
@@ -1454,9 +1461,9 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             4. Keep it clean text (no markdown).
             Tone: Professional, direct, high-finance. Under 60 words.
             `;
-            // Switch to gemini-2.0-flash as requested
-            const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
-            setAdvice(response.text);
+            
+            const result = await model.generateContent(prompt);
+            setAdvice(result.response.text());
         } catch (e) { 
             console.error("AI Error:", e);
             setAdvice("Advisory systems unavailable. Check network protocols."); 
