@@ -35,8 +35,6 @@ import {
   Search
 } from 'lucide-react';
 
-declare var process: any;
-
 // --- Configuration & Constants ---
 const COIN_COUNT = 90; 
 const GOLD_COLOR = '#D4AF37';
@@ -44,6 +42,9 @@ const GOLD_HIGHLIGHT = '#F3E5AB';
 const DARK_GOLD = '#8A7120';
 const OBSIDIAN_BG = '#050505';
 const PLATINUM_TEXT = '#E5E4E2';
+
+// Hardcoded for Vercel/Production usage to avoid env var issues
+const GEMINI_API_KEY = "AIzaSyCBjoyOyZX_EYUz-sN7-czXAHZm0kTb1FE";
 
 // Env Variables (Vite standard)
 const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "https://hhsfmkxlzwyxtqftyieb.supabase.co";
@@ -1292,7 +1293,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         const descriptions = Array.from(uniqueDescriptions).slice(0, 100);
         if (descriptions.length > 0) {
             try {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
                 const prompt = `
                 Categorize these financial transaction descriptors into simple buckets: 
                 Buckets: Food, Transport, Utilities, Shopping, Entertainment, Health, Transfer, Housing, Salary, Investment.
@@ -1301,7 +1302,7 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
                 Descriptors: ${JSON.stringify(descriptions)}
                 `;
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     contents: prompt,
                     config: { responseMimeType: 'application/json' }
                 });
@@ -1324,7 +1325,9 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
 
     const handleAddManual = async () => {
         if (!desc || !amt) return;
-        await supabase.from('transactions').insert([{ 
+        
+        // Strict Error Handling for Manual Insertion
+        const { error } = await supabase.from('transactions').insert([{ 
             user_id: user.id,
             description: desc, 
             amount: parseFloat(amt), 
@@ -1332,7 +1335,14 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             date: new Date().toISOString().split('T')[0], 
             type: type 
         }]);
-        fetchTransactions();
+
+        if (error) {
+            console.error("Manual Insert Failed:", error);
+            alert(`Failed to add transaction. Supabase Error: ${error.message}`);
+            return;
+        }
+
+        await fetchTransactions(); // Force re-fetch
         setLastUpdated(new Date());
         setDesc(''); setAmt(''); setManualFormOpen(false);
     };
@@ -1407,7 +1417,8 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
         const categorySummary = chartData.map(c => `${c.label}: ₹${c.value}`).join(', ');
         
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // Using Hardcoded Key for Vercel
+            const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
             const prompt = `
             Act as a ruthless institutional wealth advisor for a premium client.
             Client: ${currentUser.name}.
@@ -1422,9 +1433,12 @@ const Dashboard = ({ user, supabase, onLogout }: { user: UserProfile, supabase: 
             4. Keep it clean text (no markdown).
             Tone: Professional, direct, high-finance. Under 60 words.
             `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+            const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
             setAdvice(response.text);
-        } catch (e) { setAdvice("Advisory systems unavailable. Check network protocols."); }
+        } catch (e) { 
+            console.error("AI Error:", e);
+            setAdvice("Advisory systems unavailable. Check network protocols."); 
+        }
         setIsAnalyzing(false);
     };
 
